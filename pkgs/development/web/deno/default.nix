@@ -9,25 +9,25 @@
 , libiconv
 , darwin
 , librusty_v8 ? callPackage ./librusty_v8.nix { }
+,
 }:
-
 rustPlatform.buildRustPackage rec {
   pname = "deno";
-  version = "1.38.0";
+  version = "1.41.2";
 
   src = fetchFromGitHub {
     owner = "denoland";
     repo = pname;
     rev = "v${version}";
-    hash = "sha256-x01KggCu/sJnVvfJW/NZ+ARcl2Nl9LKn9dPBVmZcLi4=";
+    hash = "sha256-l8He7EM9n8r7OTC6jN6F8ldf3INXxEeaUI1u6AfR7RI=";
   };
 
-  cargoHash = "sha256-PEKdQoAYhPpeHfv2pKGTsNaA1EANpf/GJw/3s+6TCoA=";
+  cargoHash = "sha256-T+6b4bGx7y/7E0CIacKFQ32DCAiNFXFi15ibq7rDfI4=";
 
   postPatch = ''
     # upstream uses lld on aarch64-darwin for faster builds
     # within nix lld looks for CoreFoundation rather than CoreFoundation.tbd and fails
-    substituteInPlace .cargo/config.toml --replace '"-C", "link-arg=-fuse-ld=lld"' ""
+    substituteInPlace .cargo/config.toml --replace "-fuse-ld=lld " ""
   '';
 
   # uses zlib-ng but can't dynamically link yet
@@ -40,9 +40,19 @@ rustPlatform.buildRustPackage rec {
     installShellFiles
   ];
   buildInputs = lib.optionals stdenv.isDarwin (
-    [ libiconv darwin.libobjc ] ++
-    (with darwin.apple_sdk.frameworks; [ Security CoreServices Metal Foundation QuartzCore ])
+    [ libiconv darwin.libobjc ]
+    ++ (with darwin.apple_sdk_11_0.frameworks; [
+      Security
+      CoreServices
+      Metal
+      MetalPerformanceShaders
+      Foundation
+      QuartzCore
+    ])
   );
+
+  # work around "error: unknown warning group '-Wunused-but-set-parameter'"
+  env.NIX_CFLAGS_COMPILE = lib.optionalString stdenv.cc.isClang "-Wno-unknown-warning-option";
 
   buildAndTestSubdir = "cli";
 

@@ -2,6 +2,7 @@
 , asyncclick
 , buildPythonPackage
 , fetchPypi
+, firebase-messaging
 , oauthlib
 , poetry-core
 , pytest-asyncio
@@ -17,7 +18,7 @@
 
 buildPythonPackage rec {
   pname = "ring-doorbell";
-  version = "0.8.0";
+  version = "0.8.7";
   pyproject = true;
 
   disabled = pythonOlder "3.8";
@@ -25,7 +26,7 @@ buildPythonPackage rec {
   src = fetchPypi {
     pname = "ring_doorbell";
     inherit version;
-    hash = "sha256-6kfD87GlEb+f6hUSqhyPIy4Xg63f8zDdGKMaOxQYWoM=";
+    hash = "sha256-Awi0Wa/ayzhpecTCKWRt+2bQvvvDxbjN+bIKAdorETs=";
   };
 
   nativeBuildInputs = [
@@ -39,6 +40,12 @@ buildPythonPackage rec {
     requests
     requests-oauthlib
   ];
+
+  passthru.optional-dependencies = {
+    listen = [
+      firebase-messaging
+    ];
+  };
 
   nativeCheckInputs = [
     pytest-asyncio

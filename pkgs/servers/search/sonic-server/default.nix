@@ -1,23 +1,25 @@
 { lib
+, stdenv
 , rustPlatform
 , fetchFromGitHub
 , nix-update-script
+, nixosTests
 , testers
 , sonic-server
 }:
 
 rustPlatform.buildRustPackage rec {
   pname = "sonic-server";
-  version = "1.4.3";
+  version = "1.4.8";
 
   src = fetchFromGitHub {
     owner = "valeriansaliou";
     repo = "sonic";
     rev = "refs/tags/v${version}";
-    hash = "sha256-V97K4KS46DXje4qKA11O9NEm0s13aTUnM+XW8lGc6fo=";
+    hash = "sha256-kNuLcImowjoptNQI12xHD6Tv+LLYdwlpauqYviKw6Xk=";
   };
 
-  cargoHash = "sha256-vWAFWoscV0swwrBQoa3glKXMRgdGYa+QrPprlVCP1QM=";
+  cargoHash = "sha256-9XSRb5RB82L72RzRWPJ45AJahkRnLwAL7lI2QFqbeko=";
 
   # Found argument '--test-threads' which wasn't expected, or isn't valid in this context
   doCheck = false;
@@ -25,6 +27,10 @@ rustPlatform.buildRustPackage rec {
   nativeBuildInputs = [
     rustPlatform.bindgenHook
   ];
+
+  # Work around https://github.com/NixOS/nixpkgs/issues/166205.
+  env.NIX_LDFLAGS = lib.optionalString stdenv.cc.isClang "-l${stdenv.cc.libcxx.cxxabi.libName}";
+  env.NIX_CFLAGS_COMPILE = lib.optionalString stdenv.isDarwin "-faligned-allocation";
 
   postPatch = ''
     substituteInPlace src/main.rs --replace "./config.cfg" "$out/etc/sonic/config.cfg"
@@ -42,6 +48,7 @@ rustPlatform.buildRustPackage rec {
 
   passthru = {
     tests = {
+      inherit (nixosTests) sonic-server;
       version = testers.testVersion {
         command = "sonic --version";
         package = sonic-server;

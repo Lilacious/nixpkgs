@@ -9,7 +9,9 @@
 , cairo
 , git
 , hyprland-protocols
+, hyprlang
 , jq
+, libGL
 , libdrm
 , libexecinfo
 , libinput
@@ -19,6 +21,7 @@
 , pango
 , pciutils
 , systemd
+, tomlplusplus
 , udis86
 , wayland
 , wayland-protocols
@@ -27,26 +30,27 @@
 , xcbutilwm
 , xwayland
 , debug ? false
-, enableNvidiaPatches ? false
 , enableXWayland ? true
 , legacyRenderer ? false
-, withSystemd ? true
+, withSystemd ? lib.meta.availableOn stdenv.hostPlatform systemd
 , wrapRuntimeDeps ? true
   # deprecated flags
 , nvidiaPatches ? false
 , hidpiXWayland ? false
+, enableNvidiaPatches ? false
 }:
-assert lib.assertMsg (!nvidiaPatches) "The option `nvidiaPatches` has been renamed `enableNvidiaPatches`";
+assert lib.assertMsg (!nvidiaPatches) "The option `nvidiaPatches` has been removed.";
+assert lib.assertMsg (!enableNvidiaPatches) "The option `enableNvidiaPatches` has been removed.";
 assert lib.assertMsg (!hidpiXWayland) "The option `hidpiXWayland` has been removed. Please refer https://wiki.hyprland.org/Configuring/XWayland";
 stdenv.mkDerivation (finalAttrs: {
   pname = "hyprland" + lib.optionalString debug "-debug";
-  version = "0.32.0";
+  version = "0.36.0";
 
   src = fetchFromGitHub {
     owner = "hyprwm";
     repo = finalAttrs.pname;
     rev = "v${finalAttrs.version}";
-    hash = "sha256-HrnlCdZBqqE37gFORapfSGEGcqhCyhX2aSMRnDEmR0k=";
+    hash = "sha256-oZe4k6jtO/0govmERGcbeyvE9EfTvXY5bnyIs6AsL9U=";
   };
 
   patches = [
@@ -64,6 +68,7 @@ stdenv.mkDerivation (finalAttrs: {
       --replace "@HASH@" '${finalAttrs.src.rev}' \
       --replace "@BRANCH@" "" \
       --replace "@MESSAGE@" "" \
+      --replace "@DATE@" "2024-02-05" \
       --replace "@TAG@" "" \
       --replace "@DIRTY@" ""
   '';
@@ -88,6 +93,8 @@ stdenv.mkDerivation (finalAttrs: {
       cairo
       git
       hyprland-protocols
+      hyprlang
+      libGL
       libdrm
       libinput
       libxkbcommon
@@ -97,7 +104,8 @@ stdenv.mkDerivation (finalAttrs: {
       wayland-protocols
       pango
       pciutils
-      (wlroots.override { inherit enableNvidiaPatches; })
+      tomlplusplus
+      wlroots
     ]
     ++ lib.optionals stdenv.hostPlatform.isMusl [ libexecinfo ]
     ++ lib.optionals enableXWayland [ libxcb xcbutilwm xwayland ]
@@ -108,17 +116,19 @@ stdenv.mkDerivation (finalAttrs: {
     then "debug"
     else "release";
 
-  mesonFlags = builtins.concatLists [
-    (lib.optional (!enableXWayland) "-Dxwayland=disabled")
-    (lib.optional legacyRenderer "-DLEGACY_RENDERER:STRING=true")
-    (lib.optional withSystemd "-Dsystemd=enabled")
+  mesonAutoFeatures = "disabled";
+
+  mesonFlags = [
+    (lib.mesonEnable "xwayland" enableXWayland)
+    (lib.mesonEnable "legacy_renderer" legacyRenderer)
+    (lib.mesonEnable "systemd" withSystemd)
   ];
 
   postInstall = ''
     ln -s ${wlroots}/include/wlr $dev/include/hyprland/wlroots
     ${lib.optionalString wrapRuntimeDeps ''
       wrapProgram $out/bin/Hyprland \
-        --suffix PATH : ${lib.makeBinPath [binutils pciutils]}
+        --suffix PATH : ${lib.makeBinPath [binutils pciutils stdenv.cc]}
     ''}
   '';
 

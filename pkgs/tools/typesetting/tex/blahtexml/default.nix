@@ -11,6 +11,16 @@ stdenv.mkDerivation rec {
     hash = "sha256-DL5DyfARHHbwWBVHSa/VwHzNaAx/v7EDdnw1GLOk+y0=";
   };
 
+  postPatch = lib.optionalString stdenv.cc.isClang ''
+    substituteInPlace makefile \
+      --replace "\$(CXX)" "\$(CXX) -std=c++98"
+  '' +
+  # fix the doc build on TeX Live 2023
+  ''
+    substituteInPlace Documentation/manual.tex \
+      --replace '\usepackage[utf8x]{inputenc}' '\usepackage[utf8]{inputenc}'
+  '';
+
   outputs = [ "out" "doc" ];
 
   nativeBuildInputs = [ texliveFull ]; # scheme-full needed for ucs package

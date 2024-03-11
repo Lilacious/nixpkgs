@@ -27,7 +27,7 @@ assert !cppSupport || !mpiSupport;
 let inherit (lib) optional optionals; in
 
 stdenv.mkDerivation rec {
-  version = "1.14.2";
+  version = "1.14.3";
   pname = "hdf5"
     + lib.optionalString cppSupport "-cpp"
     + lib.optionalString fortranSupport "-fortran"
@@ -41,7 +41,7 @@ stdenv.mkDerivation rec {
         majorMinorPatch = with lib.versions; "${major version}.${minor version}.${patch version}";
       in
       "https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-${majorMinor}/hdf5-${majorMinorPatch}/src/hdf5-${version}.tar.bz2";
-    sha256 = "sha256-6jxeJX7zIq9ed/weUurTrWvzu0rAZIDdF+45ANeiTPs=";
+    sha256 = "sha256-lCXyJO110SgLtG1vJpI92Tj5BA5+rr9X5m7HNXwI+Rc=";
   };
 
   passthru = {
@@ -76,7 +76,7 @@ stdenv.mkDerivation rec {
     ++ lib.optional cppSupport "-DHDF5_BUILD_CPP_LIB=ON"
     ++ lib.optional fortranSupport "-DHDF5_BUILD_FORTRAN=ON"
     ++ lib.optional szipSupport "-DHDF5_ENABLE_SZIP_SUPPORT=ON"
-    ++ lib.optionals mpiSupport [ "-DHDF5_ENABLE_PARALLEL=ON" "CC=${mpi}/bin/mpicc" ]
+    ++ lib.optionals mpiSupport [ "-DHDF5_ENABLE_PARALLEL=ON" ]
     ++ lib.optional enableShared "-DBUILD_SHARED_LIBS=ON"
     ++ lib.optional javaSupport "-DHDF5_BUILD_JAVA=ON"
     ++ lib.optional usev110Api "-DDEFAULT_API_VERSION=v110"

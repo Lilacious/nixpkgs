@@ -1,5 +1,17 @@
 { lib }:
 
+let
+  inherit (builtins)
+    intersectAttrs;
+  inherit (lib)
+    functionArgs isFunction mirrorFunctionArgs isAttrs setFunctionArgs
+    optionalAttrs attrNames filter elemAt concatStringsSep sortOn take length
+    filterAttrs optionalString flip pathIsDirectory head pipe isDerivation listToAttrs
+    mapAttrs seq flatten deepSeq warnIf isInOldestRelease extends
+    ;
+  inherit (lib.strings) levenshtein levenshteinAtMost;
+
+in
 rec {
 
 
@@ -43,15 +55,15 @@ rec {
   overrideDerivation = drv: f:
     let
       newDrv = derivation (drv.drvAttrs // (f drv));
-    in lib.flip (extendDerivation (builtins.seq drv.drvPath true)) newDrv (
+    in flip (extendDerivation (seq drv.drvPath true)) newDrv (
       { meta = drv.meta or {};
         passthru = if drv ? passthru then drv.passthru else {};
       }
       //
       (drv.passthru or {})
       //
-      lib.optionalAttrs (drv ? __spliced) {
-        __spliced = {} // (lib.mapAttrs (_: sDrv: overrideDerivation sDrv f) drv.__spliced);
+      optionalAttrs (drv ? __spliced) {
+        __spliced = {} // (mapAttrs (_: sDrv: overrideDerivation sDrv f) drv.__spliced);
       });
 
 
@@ -76,34 +88,36 @@ rec {
      Type:
        makeOverridable :: (AttrSet -> a) -> AttrSet -> a
   */
-  makeOverridable = f: lib.setFunctionArgs
-    (origArgs: let
+  makeOverridable = f:
+    let
+      # Creates a functor with the same arguments as f
+      mirrorArgs = mirrorFunctionArgs f;
+    in
+    mirrorArgs (origArgs:
+    let
       result = f origArgs;
 
-      # Creates a functor with the same arguments as f
-      copyArgs = g: lib.setFunctionArgs g (lib.functionArgs f);
       # Changes the original arguments with (potentially a function that returns) a set of new attributes
-      overrideWith = newArgs: origArgs // (if lib.isFunction newArgs then newArgs origArgs else newArgs);
+      overrideWith = newArgs: origArgs // (if isFunction newArgs then newArgs origArgs else newArgs);
 
       # Re-call the function but with different arguments
-      overrideArgs = copyArgs (newArgs: makeOverridable f (overrideWith newArgs));
+      overrideArgs = mirrorArgs (newArgs: makeOverridable f (overrideWith newArgs));
       # Change the result of the function call by applying g to it
-      overrideResult = g: makeOverridable (copyArgs (args: g (f args))) origArgs;
+      overrideResult = g: makeOverridable (mirrorArgs (args: g (f args))) origArgs;
     in
-      if builtins.isAttrs result then
+      if isAttrs result then
         result // {
           override = overrideArgs;
           overrideDerivation = fdrv: overrideResult (x: overrideDerivation x fdrv);
           ${if result ? overrideAttrs then "overrideAttrs" else null} = fdrv:
             overrideResult (x: x.overrideAttrs fdrv);
         }
-      else if lib.isFunction result then
+      else if isFunction result then
         # Transform the result into a functor while propagating its arguments
-        lib.setFunctionArgs result (lib.functionArgs result) // {
+        setFunctionArgs result (functionArgs result) // {
           override = overrideArgs;
         }
-      else result)
-    (lib.functionArgs f);
+      else result);
 
 
   /* Call the package function in the file `fn` with the required
@@ -138,39 +152,39 @@ rec {
   */
   callPackageWith = autoArgs: fn: args:
     let
-      f = if lib.isFunction fn then fn else import fn;
-      fargs = lib.functionArgs f;
+      f = if isFunction fn then fn else import fn;
+      fargs = functionArgs f;
 
       # All arguments that will be passed to the function
       # This includes automatic ones and ones passed explicitly
-      allArgs = builtins.intersectAttrs fargs autoArgs // args;
+      allArgs = intersectAttrs fargs autoArgs // args;
 
       # a list of argument names that the function requires, but
       # wouldn't be passed to it
-      missingArgs = lib.attrNames
+      missingArgs =
         # Filter out arguments that have a default value
-        (lib.filterAttrs (name: value: ! value)
+        (filterAttrs (name: value: ! value)
         # Filter out arguments that would be passed
-        (removeAttrs fargs (lib.attrNames allArgs)));
+        (removeAttrs fargs (attrNames allArgs)));
 
       # Get a list of suggested argument names for a given missing one
-      getSuggestions = arg: lib.pipe (autoArgs // args) [
-        lib.attrNames
+      getSuggestions = arg: pipe (autoArgs // args) [
+        attrNames
         # Only use ones that are at most 2 edits away. While mork would work,
         # levenshteinAtMost is only fast for 2 or less.
-        (lib.filter (lib.strings.levenshteinAtMost 2 arg))
+        (filter (levenshteinAtMost 2 arg))
         # Put strings with shorter distance first
-        (lib.sort (x: y: lib.strings.levenshtein x arg < lib.strings.levenshtein y arg))
+        (sortOn (levenshtein arg))
         # Only take the first couple results
-        (lib.take 3)
+        (take 3)
         # Quote all entries
         (map (x: "\"" + x + "\""))
       ];
 
       prettySuggestions = suggestions:
         if suggestions == [] then ""
-        else if lib.length suggestions == 1 then ", did you mean ${lib.elemAt suggestions 0}?"
-        else ", did you mean ${lib.concatStringsSep ", " (lib.init suggestions)} or ${lib.last suggestions}?";
+        else if length suggestions == 1 then ", did you mean ${elemAt suggestions 0}?"
+        else ", did you mean ${concatStringsSep ", " (lib.init suggestions)} or ${lib.last suggestions}?";
 
       errorForArg = arg:
         let
@@ -178,16 +192,22 @@ rec {
           # loc' can be removed once lib/minver.nix is >2.3.4, since that includes
           # https://github.com/NixOS/nix/pull/3468 which makes loc be non-null
           loc' = if loc != null then loc.file + ":" + toString loc.line
-            else if ! lib.isFunction fn then
-              toString fn + lib.optionalString (lib.sources.pathIsDirectory fn) "/default.nix"
+            else if ! isFunction fn then
+              toString fn + optionalString (pathIsDirectory fn) "/default.nix"
             else "<unknown location>";
         in "Function called without required argument \"${arg}\" at "
         + "${loc'}${prettySuggestions (getSuggestions arg)}";
 
       # Only show the error for the first missing argument
-      error = errorForArg (lib.head missingArgs);
+      error = errorForArg (head (attrNames missingArgs));
 
-    in if missingArgs == [] then makeOverridable f allArgs else abort error;
+    in if missingArgs == {}
+       then makeOverridable f allArgs
+       # This needs to be an abort so it can't be caught with `builtins.tryEval`,
+       # which is used by nix-env and ofborg to filter out packages that don't evaluate.
+       # This way we're forced to fix such errors in Nixpkgs,
+       # which is especially relevant with allowAliases = false
+       else abort "lib.customisation.callPackageWith: ${error}";
 
 
   /* Like callPackage, but for a function that returns an attribute
@@ -199,17 +219,18 @@ rec {
   */
   callPackagesWith = autoArgs: fn: args:
     let
-      f = if lib.isFunction fn then fn else import fn;
-      auto = builtins.intersectAttrs (lib.functionArgs f) autoArgs;
+      f = if isFunction fn then fn else import fn;
+      auto = intersectAttrs (functionArgs f) autoArgs;
+      mirrorArgs = mirrorFunctionArgs f;
       origArgs = auto // args;
       pkgs = f origArgs;
-      mkAttrOverridable = name: _: makeOverridable (newArgs: (f newArgs).${name}) origArgs;
+      mkAttrOverridable = name: _: makeOverridable (mirrorArgs (newArgs: (f newArgs).${name})) origArgs;
     in
-      if lib.isDerivation pkgs then throw
+      if isDerivation pkgs then throw
         ("function `callPackages` was called on a *single* derivation "
           + ''"${pkgs.name or "<unknown-name>"}";''
           + " did you mean to use `callPackage` instead?")
-      else lib.mapAttrs mkAttrOverridable pkgs;
+      else mapAttrs mkAttrOverridable pkgs;
 
 
   /* Add attributes to each output of a derivation without changing
@@ -222,7 +243,7 @@ rec {
     let
       outputs = drv.outputs or [ "out" ];
 
-      commonAttrs = drv // (builtins.listToAttrs outputsList) //
+      commonAttrs = drv // (listToAttrs outputsList) //
         ({ all = map (x: x.value) outputsList; }) // passthru;
 
       outputToAttrListElement = outputName:
@@ -236,7 +257,7 @@ rec {
             # TODO: give the derivation control over the outputs.
             #       `overrideAttrs` may not be the only attribute that needs
             #       updating when switching outputs.
-            lib.optionalAttrs (passthru?overrideAttrs) {
+            optionalAttrs (passthru?overrideAttrs) {
               # TODO: also add overrideAttrs when overrideAttrs is not custom, e.g. when not splicing.
               overrideAttrs = f: (passthru.overrideAttrs f).${outputName};
             };
@@ -262,11 +283,11 @@ rec {
 
       commonAttrs =
         { inherit (drv) name system meta; inherit outputs; }
-        // lib.optionalAttrs (drv._hydraAggregate or false) {
+        // optionalAttrs (drv._hydraAggregate or false) {
           _hydraAggregate = true;
-          constituents = map hydraJob (lib.flatten drv.constituents);
+          constituents = map hydraJob (flatten drv.constituents);
         }
-        // (lib.listToAttrs outputsList);
+        // (listToAttrs outputsList);
 
       makeOutput = outputName:
         let output = drv.${outputName}; in
@@ -281,32 +302,143 @@ rec {
 
       outputsList = map makeOutput outputs;
 
-      drv' = (lib.head outputsList).value;
+      drv' = (head outputsList).value;
     in if drv == null then null else
-      lib.deepSeq drv' drv';
+      deepSeq drv' drv';
 
-  /* Make a set of packages with a common scope. All packages called
-     with the provided `callPackage` will be evaluated with the same
-     arguments. Any package in the set may depend on any other. The
-     `overrideScope'` function allows subsequent modification of the package
-     set in a consistent way, i.e. all packages in the set will be
-     called with the overridden packages. The package sets may be
-     hierarchical: the packages in the set are called with the scope
-     provided by `newScope` and the set provides a `newScope` attribute
-     which can form the parent scope for later package sets.
+  /**
+    Make an attribute set (a "scope") from functions that take arguments from that same attribute set.
+    See [](#ex-makeScope) for how to use it.
 
-     Type:
-       makeScope :: (AttrSet -> ((AttrSet -> a) | Path) -> AttrSet -> a) -> (AttrSet -> AttrSet) -> AttrSet
+    # Inputs
+
+    1. `newScope` (`AttrSet -> ((AttrSet -> a) | Path) -> AttrSet -> a`)
+
+       A function that takes an attribute set `attrs` and returns what ends up as `callPackage` in the output.
+
+       Typical values are `callPackageWith` or the output attribute `newScope`.
+
+    2. `f` (`AttrSet -> AttrSet`)
+
+       A function that takes an attribute set as returned by `makeScope newScope f` (a "scope") and returns any attribute set.
+
+       This function is used to compute the fixpoint of the resulting scope using `callPackage`.
+       Its argument is the lazily evaluated reference to the value of that fixpoint, and is typically called `self` or `final`.
+
+       See [](#ex-makeScope) for how to use it.
+       See [](#sec-functions-library-fixedPoints) for details on fixpoint computation.
+
+    # Output
+
+    `makeScope` returns an attribute set of a form called `scope`, which also contains the final attributes produced by `f`:
+
+    ```
+    scope :: {
+      callPackage :: ((AttrSet -> a) | Path) -> AttrSet -> a
+      newScope = AttrSet -> scope
+      overrideScope = (scope -> scope -> AttrSet) -> scope
+      packages :: AttrSet -> AttrSet
+    }
+    ```
+
+    - `callPackage` (`((AttrSet -> a) | Path) -> AttrSet -> a`)
+
+      A function that
+
+      1. Takes a function `p`, or a path to a Nix file that contains a function `p`, which takes an attribute set and returns value of arbitrary type `a`,
+      2. Takes an attribute set `args` with explicit attributes to pass to `p`,
+      3. Calls `f` with attributes from the original attribute set `attrs` passed to `newScope` updated with `args, i.e. `attrs // args`, if they match the attributes in the argument of `p`.
+
+      All such functions `p` will be called with the same value for `attrs`.
+
+      See [](#ex-makeScope-callPackage) for how to use it.
+
+    - `newScope` (`AttrSet -> scope`)
+
+      Takes an attribute set `attrs` and returns a scope that extends the original scope.
+
+    - `overrideScope` (`(scope -> scope -> AttrSet) -> scope`)
+
+      Takes a function `g` of the form `final: prev: { # attributes }` to act as an overlay on `f`, and returns a new scope with values determined by `extends g f`.
+      See [](https://nixos.org/manual/nixpkgs/unstable/#function-library-lib.fixedPoints.extends) for details.
+
+      This allows subsequent modification of the final attribute set in a consistent way, i.e. all functions `p` invoked with `callPackage` will be called with the modified values.
+
+    - `packages` (`AttrSet -> AttrSet`)
+
+      The value of the argument `f` to `makeScope`.
+
+    - final attributes
+
+      The final values returned by `f`.
+
+    # Examples
+
+    :::{#ex-makeScope .example}
+    # Create an interdependent package set on top of `pkgs`
+
+    The functions in `foo.nix` and `bar.nix` can depend on each other, in the sense that `foo.nix` can contain a function that expects `bar` as an attribute in its argument.
+
+    ```nix
+    let
+      pkgs = import <nixpkgs> { };
+    in
+    pkgs.lib.makeScope pkgs.newScope (self: {
+      foo = self.callPackage ./foo.nix { };
+      bar = self.callPackage ./bar.nix { };
+    })
+    ```
+
+    evaluates to
+
+    ```nix
+    {
+      callPackage = «lambda»;
+      newScope = «lambda»;
+      overrideScope = «lambda»;
+      packages = «lambda»;
+      foo = «derivation»;
+      bar = «derivation»;
+    }
+    ```
+    :::
+
+    :::{#ex-makeScope-callPackage .example}
+    # Using `callPackage` from a scope
+
+    ```nix
+    let
+      pkgs = import <nixpkgs> { };
+      inherit (pkgs) lib;
+      scope = lib.makeScope lib.callPackageWith (self: { a = 1; b = 2; });
+      three = scope.callPackage ({ a, b }: a + b) { };
+      four = scope.callPackage ({ a, b }: a + b) { a = 2; };
+    in
+    [ three four ]
+    ```
+
+    evaluates to
+
+    ```nix
+    [ 3 4 ]
+    ```
+    :::
+
+    # Type
+
+    ```
+    makeScope :: (AttrSet -> ((AttrSet -> a) | Path) -> AttrSet -> a) -> (AttrSet -> AttrSet) -> scope
+    ```
   */
   makeScope = newScope: f:
     let self = f self // {
           newScope = scope: newScope (self // scope);
           callPackage = self.newScope {};
-          overrideScope = g: makeScope newScope (lib.fixedPoints.extends g f);
+          overrideScope = g: makeScope newScope (extends g f);
           # Remove after 24.11 is released.
-          overrideScope' = g: lib.warnIf (lib.isInOldestRelease 2311)
+          overrideScope' = g: warnIf (isInOldestRelease 2311)
             "`overrideScope'` (from `lib.makeScope`) has been renamed to `overrideScope`."
-            (makeScope newScope (lib.fixedPoints.extends g f));
+            (makeScope newScope (extends g f));
           packages = f;
         };
     in self;
@@ -382,7 +514,7 @@ rec {
         overrideScope = g: (makeScopeWithSplicing'
           { inherit splicePackages newScope; }
           { inherit otherSplices keep extra;
-            f = lib.fixedPoints.extends g f;
+            f = extends g f;
           });
         packages = f;
       };

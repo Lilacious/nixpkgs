@@ -2,16 +2,16 @@
 
 buildGoModule rec {
   pname = "vultr-cli";
-  version = "2.19.0";
+  version = "3.0.1";
 
   src = fetchFromGitHub {
     owner = "vultr";
     repo = pname;
     rev = "v${version}";
-    hash = "sha256-RLJtDzG3dKaJkppJO/cAggvgB9egCxCWd1mbQ91KPuY=";
+    hash = "sha256-9akEDsBj2EpZtUBh0+Dck5otsmFzdvJshXxOtYVdi1o=";
   };
 
-  vendorHash = "sha256-lVZcmqEC4InZr2zcgI4WVg6Pl3Cv/crTWuLSnqY3Vyk=";
+  vendorHash = "sha256-jkl36S7h1l6FeeHEhc+PKOQO9Uq/4L5wTb8+PhG2exY=";
 
   nativeBuildInputs = [ installShellFiles ];
 

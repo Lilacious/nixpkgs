@@ -5,7 +5,7 @@
 , python3
 , fetchYarnDeps
 , fetchNpmDeps
-, fixup_yarn_lock
+, prefetch-yarn-deps
 , npmHooks
 , yarn
 , substituteAll
@@ -27,25 +27,27 @@ in (chromium.override { upstream-info = info.chromium; }).mkDerivation (base: {
   inherit (info) version;
   buildTargets = [ "electron:electron_dist_zip" ];
 
-  nativeBuildInputs = base.nativeBuildInputs ++ [ nodejs yarn fixup_yarn_lock unzip npmHooks.npmConfigHook ];
+  nativeBuildInputs = base.nativeBuildInputs ++ [ nodejs yarn prefetch-yarn-deps unzip npmHooks.npmConfigHook ];
   buildInputs = base.buildInputs ++ [ libnotify ];
 
   electronOfflineCache = fetchYarnDeps {
     yarnLock = (fetchdep info.deps."src/electron") + "/yarn.lock";
     sha256 = info.electron_yarn_hash;
   };
-  npmDeps = fetchNpmDeps {
+  npmDeps = fetchNpmDeps rec {
     src = fetchdep info.deps."src";
-    sourceRoot = "source/third_party/node";
+    # Assume that the fetcher always unpack the source,
+    # based on update.py
+    sourceRoot = "${src.name}/third_party/node";
     hash = info.chromium_npm_hash;
   };
 
   src = null;
 
-  patches = base.patches ++ lib.optional (lib.versionOlder info.version "28")
+  patches = base.patches ++ lib.optional (lib.versionOlder info.version "27")
     (substituteAll {
       name = "version.patch";
-      src = if lib.versionAtLeast info.version "27" then ./version.patch else ./version-old.patch;
+      src = ./version.patch;
       inherit (info) version;
     })
   ;
@@ -107,7 +109,7 @@ in (chromium.override { upstream-info = info.chromium; }).mkDerivation (base: {
       cd electron
       export HOME=$TMPDIR/fake_home
       yarn config --offline set yarn-offline-mirror $electronOfflineCache
-      fixup_yarn_lock yarn.lock
+      fixup-yarn-lock yarn.lock
       yarn install --offline --frozen-lockfile --ignore-scripts --no-progress --non-interactive
     )
 
@@ -118,10 +120,10 @@ in (chromium.override { upstream-info = info.chromium; }).mkDerivation (base: {
       for key in $(jq -r "keys[]" $config)
       do
         value=$(jq -r ".\"$key\"" $config)
-        echo patching $value
         for patch in $(cat $key/.patches)
         do
-          git apply -p1 --directory=$value $key/$patch
+          echo applying in $value: $patch
+          git apply -p1 --directory=$value --exclude='src/third_party/blink/web_tests/*' $key/$patch
         done
       done
     )
@@ -165,15 +167,17 @@ in (chromium.override { upstream-info = info.chromium; }).mkDerivation (base: {
     enable_widevine = false;
     use_perfetto_client_library = false;
     enable_check_raw_ptr_fields = false;
-  } // lib.optionalAttrs (lib.versionOlder info.version "26")  {
-    use_gnome_keyring = false;
-  } // lib.optionalAttrs (lib.versionAtLeast info.version "28")  {
+  } // lib.optionalAttrs (lib.versionAtLeast info.version "27")  {
     override_electron_version = info.version;
   };
 
   installPhase = ''
+    runHook preInstall
+
     mkdir -p $libExecPath
     unzip -d $libExecPath out/Release/dist.zip
+
+    runHook postInstall
   '';
 
   requiredSystemFeatures = [ "big-parallel" ];
@@ -181,14 +185,18 @@ in (chromium.override { upstream-info = info.chromium; }).mkDerivation (base: {
   passthru = {
     inherit info;
     headers = stdenv.mkDerivation rec {
-      name = "node-v${info.node}-headers.tar.xz";
+      name = "node-v${info.node}-headers.tar.gz";
       nativeBuildInputs = [ python3 ];
       src = fetchdep info.deps."src/third_party/electron_node";
       buildPhase = ''
+        runHook preBuild
         make tar-headers
+        runHook postBuild
       '';
       installPhase = ''
+        runHook preInstall
         mv ${name} $out
+        runHook postInstall
       '';
     };
   };

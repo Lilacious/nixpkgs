@@ -4,7 +4,7 @@
 , fetchYarnDeps
 , makeDesktopItem
 , copyDesktopItems
-, fixup_yarn_lock
+, prefetch-yarn-deps
 , makeWrapper
 , nodejs
 , yarn
@@ -13,23 +13,23 @@
 
 stdenv.mkDerivation rec {
   pname = "drawio";
-  version = "22.0.3";
+  version = "23.1.5";
 
   src = fetchFromGitHub {
     owner = "jgraph";
     repo = "drawio-desktop";
     rev = "v${version}";
     fetchSubmodules = true;
-    hash = "sha256-Im0T+1jm1IZT3UILsOJ4Rp5P5IiBUKcJJ+cqv3WsqXw=";
+    hash = "sha256-ThmTahuU0o/vr6h/T/zCyEB5/APJlVA6t1TNfZgqTJ0=";
   };
 
   offlineCache = fetchYarnDeps {
     yarnLock = src + "/yarn.lock";
-    hash = "sha256-Abyu/WoNOPAIfRIThG7vKFECW9NQMgcBAkLgEPwdJDQ=";
+    hash = "sha256-hL89WVYy/EQe6Zppmr17Q9T2o/UjBvydDIgGpr7AA5M=";
   };
 
   nativeBuildInputs = [
-    fixup_yarn_lock
+    prefetch-yarn-deps
     makeWrapper
     nodejs
     yarn
@@ -44,7 +44,7 @@ stdenv.mkDerivation rec {
 
     export HOME="$TMPDIR"
     yarn config --offline set yarn-offline-mirror "$offlineCache"
-    fixup_yarn_lock yarn.lock
+    fixup-yarn-lock yarn.lock
     yarn install --offline --frozen-lockfile --ignore-platform --ignore-scripts --no-progress --non-interactive
     patchShebangs node_modules/
 
@@ -61,7 +61,7 @@ stdenv.mkDerivation rec {
     sed -i "/afterSign/d" electron-builder-linux-mac.json
   '' + ''
     yarn --offline run electron-builder --dir \
-      --config electron-builder-linux-mac.json \
+      ${if stdenv.isDarwin then "--config electron-builder-linux-mac.json" else ""} \
       -c.electronDist=${if stdenv.isDarwin then "." else "${electron}/libexec/electron"} \
       -c.electronVersion=${electron.version}
 
@@ -112,5 +112,6 @@ stdenv.mkDerivation rec {
     changelog = "https://github.com/jgraph/drawio-desktop/releases/tag/v${version}";
     maintainers = with maintainers; [ qyliss darkonion0 ];
     platforms = platforms.darwin ++ platforms.linux;
+    mainProgram = "drawio";
   };
 }

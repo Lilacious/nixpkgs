@@ -4,6 +4,8 @@
 , gnome2, mesa, nss, nspr, gtk_engines, freetype, dconf, libpng12, libxml2
 , libjpeg, libredirect, tzdata, cacert, systemd, libcxxabi, libcxx, e2fsprogs, symlinkJoin
 , libpulseaudio, pcsclite, glib-networking, llvmPackages_12, opencv4
+, libfaketime
+, libinput, libcap, libjson, libsecret, libcanberra-gtk3
 
 , homepage, version, prefix, hash
 
@@ -20,6 +22,18 @@ let
       ln -sf $out/lib/libssl.so $out/lib/libssl.so.1.0.0
     '';
   };
+
+  opencv4' = symlinkJoin {
+    name = "opencv4-compat";
+    nativeBuildInputs = [ makeWrapper ];
+    paths = [ opencv4 ];
+    postBuild = ''
+      for so in ${opencv4}/lib/*.so; do
+        ln -s "$so" $out/lib/$(basename "$so").407
+      done
+    '';
+  };
+
 in
 
 stdenv.mkDerivation rec {
@@ -37,7 +51,7 @@ stdenv.mkDerivation rec {
       ${homepage}
 
       (if you do not find version ${version} there, try at
-      https://www.citrix.com/downloads/workspace-app/
+      https://www.citrix.com/downloads/workspace-app/)
 
       Once you have downloaded the file, please use the following command and re-run the
       installation:
@@ -59,6 +73,7 @@ stdenv.mkDerivation rec {
     more
     which
     wrapGAppsHook
+    libfaketime
   ];
 
   buildInputs = [
@@ -78,11 +93,16 @@ stdenv.mkDerivation rec {
     gtk_engines
     heimdal
     krb5
+    libcap
+    libcanberra-gtk3
     libcxx
     libcxxabi
+    libinput
     libjpeg
+    libjson
     libpng12
     libpulseaudio
+    libsecret
     libsoup
     libvorbis
     libxml2
@@ -90,7 +110,7 @@ stdenv.mkDerivation rec {
     mesa
     nspr
     nss
-    opencv4
+    opencv4'
     openssl'
     pango
     speex
@@ -117,6 +137,8 @@ stdenv.mkDerivation rec {
     xorg.libXrender
     xorg.libXtst
     xorg.libxcb
+    xorg.xprop
+    xorg.xdpyinfo
   ];
 
   installPhase = let
@@ -153,7 +175,8 @@ stdenv.mkDerivation rec {
 
     # Run upstream installer in the store-path.
     sed -i -e 's,^ANSWER="",ANSWER="$INSTALLER_YES",g' -e 's,/bin/true,true,g' ./${prefix}/hinst
-    ${stdenv.shell} ${prefix}/hinst CDROM "$(pwd)"
+    source_date=$(date --utc --date=@$SOURCE_DATE_EPOCH "+%F %T")
+    faketime -f "$source_date" ${stdenv.shell} ${prefix}/hinst CDROM "$(pwd)"
 
     if [ -f "$ICAInstDir/util/setlog" ]; then
       chmod +x "$ICAInstDir/util/setlog"

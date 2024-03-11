@@ -1,22 +1,27 @@
 { lib
 , buildPythonPackage
 , fetchPypi
-, requests
 , pythonOlder
+, requests
+, setuptools
 , typing-extensions
 }:
 
 buildPythonPackage rec {
   pname = "stripe";
-  version = "7.4.0";
-  format = "setuptools";
+  version = "7.11.0";
+  pyproject = true;
 
-  disabled = pythonOlder "3.7";
+  disabled = pythonOlder "3.8";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-Pcfdgjk20yYt1DCr5XQ4rzLokQNS27NOspa/21nvCuw=";
+    hash = "sha256-vf8IJ/jZNopMXoOIdv+dwdXhYVsFrJirRQyB6589MDU=";
   };
+
+  nativeBuildInputs = [
+    setuptools
+  ];
 
   propagatedBuildInputs = [
     requests

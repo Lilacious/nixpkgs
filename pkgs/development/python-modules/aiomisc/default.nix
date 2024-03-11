@@ -22,14 +22,14 @@
 
 buildPythonPackage rec {
   pname = "aiomisc";
-  version = "17.3.23";
-  format = "pyproject";
+  version = "17.4.1";
+  pyproject = true;
 
   disabled = pythonOlder "3.7";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-9Df/eGMnXFdv3RUh4LmlPm7STlUcVBw4flfH+bZ6q9Q=";
+    hash = "sha256-SJyCxKncHRdWZUdsosOCLLRYG+ym8utXwAJjn3BRRHU=";
   };
 
   nativeBuildInputs = [
@@ -49,9 +49,7 @@ buildPythonPackage rec {
     pytestCheckHook
     raven
     setproctitle
-  ] ++ passthru.optional-dependencies.aiohttp
-  ++ passthru.optional-dependencies.cron
-  ++ passthru.optional-dependencies.uvloop;
+  ]  ++ lib.flatten (builtins.attrValues passthru.optional-dependencies);
 
   passthru.optional-dependencies = {
     aiohttp = [

@@ -1,16 +1,18 @@
 { lib
 , aiohttp
+, aiortsp
 , buildPythonPackage
 , fetchFromGitHub
 , orjson
 , pythonOlder
+, setuptools
 , typing-extensions
 }:
 
 buildPythonPackage rec {
   pname = "reolink-aio";
-  version = "0.7.15";
-  format = "setuptools";
+  version = "0.8.9";
+  pyproject = true;
 
   disabled = pythonOlder "3.9";
 
@@ -18,11 +20,16 @@ buildPythonPackage rec {
     owner = "starkillerOG";
     repo = "reolink_aio";
     rev = "refs/tags/${version}";
-    hash = "sha256-BSl7dECYJIjR9QTvcizUF3Lz1jmgm9xi4kPt7PdO/Nk=";
+    hash = "sha256-MUhB8A51dj+FA3+lvBrFyAWizKq5CpYwo38E1euJsHs=";
   };
+
+  nativeBuildInputs = [
+    setuptools
+  ];
 
   propagatedBuildInputs = [
     aiohttp
+    aiortsp
     orjson
     typing-extensions
   ];
