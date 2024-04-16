@@ -40,7 +40,7 @@ let
       mainProgram = "mumble-server";
       homepage = "https://mumble.info";
       license = licenses.bsd3;
-      maintainers = with maintainers; [ infinisil felixsinger ];
+      maintainers = with maintainers; [ felixsinger lilacious ];
       platforms = platforms.linux;
     };
   });
@@ -96,14 +96,14 @@ let
   } source;
 
   source = rec {
-    version = "1.5.613";
+    version = "1.5.629";
 
     # Needs submodules
     src = fetchFromGitHub {
       owner = "mumble-voip";
       repo = "mumble";
-      rev = "0bb8e17f0e5cd2437bccbca7b2d8cdcd903508fa";
-      sha256 = "sha256-VTjLXlCquSP9bGzrHURArP/d68N3WCcQq5fHdsew/pc=";
+      rev = "v${version}";
+      sha256 = "sha256-XJ/ESE8xEUf35UPtx5L0fj+aRXtljFt3jqDvOMHqyas=";
       fetchSubmodules = true;
     };
   };
